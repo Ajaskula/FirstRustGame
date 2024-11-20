@@ -3,7 +3,8 @@
 use std::cmp;
 
 use rand::Rng;
-use tcod::colors::*;
+use tcod::colors::{self, *};
+// use tcod::colors::{};
 use tcod::console::*;
 use tcod::map::{FovAlgorithm, Map as FovMap};
 
@@ -15,6 +16,8 @@ const SCREEN_HEIGHT: i32 = 50;
 const MAP_WIDTH: i32 = 80;
 const MAP_HEIGHT: i32 = 45;
 
+const PLAYER: i32 = 0;
+
 //parameters for dungeon generator
 const ROOM_MAX_SIZE: i32 = 10;
 const ROOM_MIN_SIZE: i32 = 6;
@@ -25,6 +28,8 @@ const LIMIT_FPS: i32 = 20; // 20 frames-per-second maximum
 const FOV_ALGO: FovAlgorithm = FovAlgorithm::Basic;
 const FOV_LIGHT_WALLS: bool = true;
 const TORCH_RADIUS: i32 = 10;
+
+const MAX_ROOM_MONSTERS: i32 = 3;
 
 const COLOR_DARK_WALL: Color = Color { r: 0, g: 0, b: 100 };
 const COLOR_LIGHT_WALL: Color = Color {
@@ -143,6 +148,11 @@ impl Object {
         con.set_default_foreground(self.color);
         con.put_char(self.x, self.y, self.char, BackgroundFlag::None);
     }
+
+    pub fn set_pos(&mut self, x: i32, y: i32) {
+        self.x = x;
+        self.y = y;
+    }
 }
 
 fn create_room(room: Rect, map: &mut Map) {
@@ -168,7 +178,7 @@ fn create_v_tunnel(y1: i32, y2: i32, x: i32, map: &mut Map) {
     }
 }
 
-fn make_map(player: &mut Object) -> Map {
+fn make_map(objects: &mut Vec<Object>) -> Map {
     // fill map with "blocked" tiles
     let mut map = vec![vec![Tile::wall(); MAP_HEIGHT as usize]; MAP_WIDTH as usize];
 
@@ -194,15 +204,18 @@ fn make_map(player: &mut Object) -> Map {
 
             // "paint" it to the map's tiles
             create_room(new_room, &mut map);
+            place_objects(new_room, objects);
 
             // center coordinates of the new room, will be useful later
             let (new_x, new_y) = new_room.center();
 
             if rooms.is_empty() {
                 // this is the first room, where the player starts at
-                player.x = new_x;
-                player.y = new_y;
+                // player.x = new_x;
+                // player.y = new_y;
+                objects[PLAYER as usize].set_pos(new_x, new_y);
             } else {
+                // place_objects(room, objects);
                 // all rooms after the first:
                 // connect it to the previous room with a tunnel
 
@@ -307,6 +320,26 @@ fn handle_keys(tcod: &mut Tcod, game: &Game, player: &mut Object) -> bool {
     false
 }
 
+fn place_objects(room: Rect, objects: &mut Vec<Object>) {
+    // choose random number of monsters
+    let num_monsters = rand::thread_rng().gen_range(0, MAX_ROOM_MONSTERS + 1);
+
+    for _ in 0..num_monsters {
+        // choose random spot for this monster
+        let x = rand::thread_rng().gen_range(room.x1 + 1, room.x2);
+        let y = rand::thread_rng().gen_range(room.y1 + 1, room.y2);
+
+        let mut monster = if rand::random::<f32>() < 0.8 { // 80% chance of getting an orc
+            // create an orc
+            Object::new(x, y, 'o', colors::DESATURATED_PURPLE)
+        } else {
+            Object::new(x, y, 'T', DARKER_CYAN)
+        };
+
+        objects.push(monster);
+    }
+}
+
 fn main() {
     tcod::system::set_fps(LIMIT_FPS);
 
@@ -328,14 +361,14 @@ fn main() {
     let player = Object::new(0, 0, '@', WHITE);
 
     // create an NPC
-    let npc = Object::new(SCREEN_WIDTH / 2 - 5, SCREEN_HEIGHT / 2, '@', YELLOW);
+    // let npc = Object::new(SCREEN_WIDTH / 2 - 5, SCREEN_HEIGHT / 2, '@', YELLOW);
 
     // the list of objects with those two
-    let mut objects = [player, npc];
+    let mut objects = vec![player];
 
     let mut game = Game {
         // generate map (at this point it's not drawn to the screen)
-        map: make_map(&mut objects[0]),
+        map: make_map(&mut objects),
     };
 
     // populate the Fov map, according to the generated map
